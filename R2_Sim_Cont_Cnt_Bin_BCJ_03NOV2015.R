@@ -87,7 +87,7 @@ Sim.LongDat <- function(seed = 260689, subs = 100, beta = c(0,-1,1/2,1/2),
 }
 
 # Set the number of sims to run
-nsims = 3
+nsims = 1000
 
 # Set a location for simulated data to be stored
 file.loc <- 'C:/Users/Byron/Desktop/School/Dissertation/R Code/Data'
@@ -160,6 +160,8 @@ for (fix in c('Full', 'Reduced')){
 R2.Dat = rbind(R2.Dat[[1]], R2.Dat[[2]], R2.Dat[[3]], R2.Dat[[4]])
 
 # The KR DDF method in SAS is more reliable, so we use the estimated R^2_\beta from SAS 
+# Note: The SAS code must be run and results stored before this code is run.
+
 sasdat = read.csv(paste(file.loc, '/R2_SIM_13OCT2015.csv', sep = '')) %>%
   mutate(Outcome = factor(Outcome, ordered=T), levels = 'Normal', 'Poisson', 'Binomia',
          Statistic = 'R2b') %>%

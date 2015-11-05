@@ -9,7 +9,7 @@ library(plyr)
 library(dplyr)
 library(tables)
 
-# Load all the functions
+# My functions
 
 r2beta <- function(model = NULL, partial = F){
   

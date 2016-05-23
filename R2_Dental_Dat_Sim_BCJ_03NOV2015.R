@@ -1,4 +1,5 @@
 
+
 rm(list=ls())
 
 library(lme4)
@@ -45,7 +46,7 @@ r2dat=data.frame()
 for(cov in c('CS', 'GC')){
   
   r2=list()
-  model.cov = ifelse(cov == 'Covariance 1', '(1|Subject)', '(1+age|Subject)')
+  model.cov = ifelse(cov == 'CS', '(1|Subject)', '(1+age|Subject)')
   null.form = paste('sim_1 ~ 1 +', model.cov)  
   
   # Dental data simulation
@@ -56,7 +57,8 @@ for(cov in c('CS', 'GC')){
     
     # Generate the data by simulating data from m
     dat = cbind(Orthodont,simulate(m, 1, seed = sim))
-    dat = merge(dat, data.frame(Subject = subs, grp = rbinom(length(subs), 1, 0.5)))
+    dat = merge(dat, data.frame(Subject = subs, 
+                                grp = rbinom(length(subs), 1, 0.5)))
     dat$noise = rnorm(nrow(dat))
     
     # Model 0 is the null model
@@ -70,9 +72,9 @@ for(cov in c('CS', 'GC')){
     
     # Model 3 is a misspecified model
     m3 <- update(m0, .~. + noise*grp)
-  
+    
     modlist=list('Full'=m1, 'Reduced'=m2, 'Noise'=m3)
-
+    
     new.r2 = lapply(modlist, function(x){
       res = unlist(c(
         r.squaredGLMM(x), 
@@ -99,4 +101,6 @@ r2dat$Model = factor(r2dat$Model,
                      levels = c('Full', 'Reduced', 'Noise'),
                      ordered = T)
 
-tab = tabular(cov*Model~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)
+tabular(cov*Model~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)
+
+

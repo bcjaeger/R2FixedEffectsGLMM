@@ -1,44 +1,50 @@
 
+rm(list=ls())
+
 library(lme4)
 library(MuMIn)
-library(ggplot2)
+library(r2glmm)
 library(nlme) 
 library(MASS)
 library(plyr)
 library(dplyr)
 library(tables)
 
-# Note: r2beta and r2beta.NS functions are needed to run the simulation.
+#  Summary function for tables
+msd <- function(x,dig=2){
+  res = format(round(c(mean(x), sd(x)) , dig), nsmall=dig)
+  return(paste0(res[1], ' (', res[2], ')'))
+}
 
-# Some functions for tables
-myfun=function(x){c(Mean = mean(x), Sd = sd(x))} 
-tabfun <- function(x,y, dig=2){paste(round(x,dig), ' (', round(y, dig), ')', sep = '')} 
+# Function to save results in a dataframe
+turn.to.df <- function(lst){
+  df = lapply(lst, data.frame)
+  for(i in names(df)){ df[[i]]=mutate(df[[i]], Model = i, cov = cov) }
+  
+  df <- do.call(rbind,df)%>% 
+    reshape2::melt(value.name = 'R2', id = c('Model', 'cov'))%>%
+    dplyr::rename(Statistic = variable)
+  
+  return(df)
+}
 
 # Set the number of sims to run
-nsims = 10000
+nsims = 10
 
 # Names for the output matrix
-nms <- c('R2m', 'R2c', 'R2betaNS', 'R2betaKR')
 
 # Get the dental data
 data(Orthodont)
-
-# Make three matrices to hold results for the three outcome types
-
-# R2.Norm1 holds the R2 values from the correct model
-# R2.Norm2 holds R2 values from an underspecified model
-# R2.Norm3 holds R2 values from model with noise parameters
-
-R2.Norm1 = R2.Norm2 = R2.Norm3 = matrix(0, nrow = nsims, ncol = length(nms), dimnames = list(1:nsims,  nms))
-Tabs = R2.Dat = list()
 
 m <- lmer(distance~age*Sex+(1+age|Subject), data = Orthodont)
 
 subs = unique(Orthodont$Subject)
 n = length(subs)
+r2dat=data.frame()
 
-for(cov in c('Covariance 1', 'Covariance 2')){
+for(cov in c('CS', 'GC')){
   
+  r2=list()
   model.cov = ifelse(cov == 'Covariance 1', '(1|Subject)', '(1+age|Subject)')
   null.form = paste('sim_1 ~ 1 +', model.cov)  
   
@@ -64,28 +70,33 @@ for(cov in c('Covariance 1', 'Covariance 2')){
     
     # Model 3 is a misspecified model
     m3 <- update(m0, .~. + noise*grp)
+  
+    modlist=list('Full'=m1, 'Reduced'=m2, 'Noise'=m3)
+
+    new.r2 = lapply(modlist, function(x){
+      res = unlist(c(
+        r.squaredGLMM(x), 
+        'r2bKR'=r2beta(x, data = dat, ddf='kr')['Rsq'],
+        'r2bNS'=r2beta(x, data = dat, ddf='res', NS.adj = T)['Rsq']
+      ))
+      names(res)=gsub('.Rsq', '', names(res))
+      return(res)
+    })
     
-    R2.Norm1[sim, ] = unlist(c(r.squaredGLMM(m1), r2beta.NS(m1), r2beta(m1, partial = F)[c('Rsq')]))
-    R2.Norm2[sim, ] = unlist(c(r.squaredGLMM(m2), r2beta.NS(m2), r2beta(m2, partial = F)[c('Rsq')]))
-    R2.Norm3[sim, ] = unlist(c(r.squaredGLMM(m3), r2beta.NS(m3), r2beta(m3, partial = F)[c('Rsq')]))
+    for(i in names(new.r2)) r2[[i]] = rbind(r2[[i]], new.r2[[i]])
     
   }
   
-  # Get summary statistics
-  r2.norm1 = data.frame(t(apply(R2.Norm1, 2, myfun))) %>% mutate(Model = 'Full', Statistic = colnames(R2.Norm1))
-  r2.norm2 = data.frame(t(apply(R2.Norm2, 2, myfun))) %>% mutate(Model = 'Reduced', Statistic = colnames(R2.Norm2))
-  r2.norm3 = data.frame(t(apply(R2.Norm3, 2, myfun))) %>% mutate(Model = 'Noise', Statistic = colnames(R2.Norm3))
+  r2.df = turn.to.df(r2)
   
-  r2.df <- rbind(r2.norm1, r2.norm2, r2.norm3) %>% 
-    dplyr::mutate(Model = factor(Model, levels = c('Full', 'Reduced', 'Noise')),
-                  Statistic = factor(Statistic),
-                  tabvar = tabfun(Mean, Sd)) %>%
-    plyr::arrange(Model, Statistic)
-  
-  r2.df$Cov = factor(cov)
-  R2.Dat[[cov]] = r2.df
-  Tabs[[cov]] = tabular(Cov * Model ~ Statistic * Heading() * (tabvar * Heading()*paste), data = r2.df)
+  r2dat = rbind(r2dat, r2.df)
   
 }
 
-rbind(Tabs[[1]], Tabs[[2]])
+ch.vars <- lapply(r2dat, class) == "character"
+r2dat[, ch.vars] <- lapply(r2dat[, ch.vars], as.factor)
+r2dat$Model = factor(r2dat$Model, 
+                     levels = c('Full', 'Reduced', 'Noise'),
+                     ordered = T)
+
+tab = tabular(cov*Model~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)

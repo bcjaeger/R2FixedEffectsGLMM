@@ -131,16 +131,11 @@ for (fix in c('Full', 'Reduced')){
       glmm.cnt <- glmer(as.formula(mod.form['Poisson']), family = 'poisson', data = dat)
       glmm.bin <- glmer(as.formula(mod.form['Binomial']), family = 'binomial', data = dat)
       
-      # true marginal R2 
-      r2.m = with(dat, var(eta) / var(yij))
-      
-      # true conditional R2 
-      r2.c = with(dat, var(etac) / var(yij))
       
       # Put all the R^2 stats into their matrices 
-      R2.Norm[sim, ] = unlist(c(r2.m, r2.c, r.squaredGLMM(lmm)))
-      R2.Pois[sim, ] = unlist(c(r2.m, r2.c, r.squaredGLMM(glmm.cnt)))
-      R2.Bin[sim,  ] = unlist(c(r2.m, r2.c, r.squaredGLMM(glmm.bin)))
+      R2.Norm[sim, ] = unlist(c(r.squaredGLMM(lmm)))
+      R2.Pois[sim, ] = unlist(c(r.squaredGLMM(glmm.cnt)))
+      R2.Bin[sim,  ] = unlist(c(r.squaredGLMM(glmm.bin)))
     }  
     
     r2.norm = data.frame(R2.Norm) %>% mutate(Outcome = names(y)[1], Model = fix, Cov = cov)

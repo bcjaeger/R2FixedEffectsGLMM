@@ -1,0 +1,190 @@
+
+library(nlme)
+library(MASS)
+library(lme4)
+library(MuMIn)
+library(stringr)
+library(tables)
+library(plyr)
+library(dplyr)
+library(r2glmm)
+
+
+# Note: This code does not reproduce the results in the paper 'An R Squared 
+# for Fixed effects in the GLMM.' The results shown here use the residual
+# degrees of freedom to compute R squared beta. To use the Kenward Roger
+# approach for the GLMM R squared beta, the SAS macro must be used.
+
+# link to the SAS macro:
+# https://github.com/bcjaeger/R2FixedEffectsGLMM/blob/master/Glimmix_R2_V3.sas
+
+Sim.LongDat <- function(seed = 260689, subs = 100, beta = c(0,-1,1/2,1/2),
+                        minobs = 10, maxobs = 20, 
+                        sigma = 2.5, tau0 = 2.5, tau1 = 0.2, tau01 = 0.3){
+  
+  # Simulated longitudinal data from a simple specification
+  # with two fixed effects and two random effects (intercept and slope)
+  #
+  # Args:
+  #    seed     : A number for random seed
+  #    subs     : The number of subjects
+  #    minobs   : Minimum number of observations per subject
+  #    maxobs   : Maximum number of observations per subject
+  #    beta     : fixed effects vector, ordered as follows
+  #    
+  #     (intercept, X1i, , time, X1i*time)
+  #    
+  #    sigma    : true random error SD
+  #    tau0     : true random intercept SD
+  #    tau1     : true random slope SD 
+  #    tau01    : true random intercept-slope correlation
+  #
+  # Returns:
+  #   a dataframe containing simulated longitudinal data
+  # 
+  # Programmer:  
+  #   Byron C. Jaeger
+  #   bcjaeger@live.unc.edu
+  
+  set.seed(seed)
+  
+  require(MASS)
+  
+  # Grouping variable
+  X1i <- rbinom(subs,size=1,prob=.5)
+  
+  # simulate (correlated) random effects for intercepts and slopes
+  S   <- matrix(c(1, tau01, tau01, 1), nrow=2)
+  tau <- c(tau0, tau1)
+  G   <- diag(tau) %*% S %*% diag(tau)
+  
+  bi  <- mvrnorm(subs,mu=rep(0, nrow(G)),Sigma=G)
+  
+  # vector of observations per subject
+  j   <- round(runif(subs,minobs,maxobs)) 
+  
+  # vector of observation times
+  tij <- as.vector(unlist(sapply(j, function(x) (1*(1:x-1)))))  
+  
+  dat <- data.frame(id=factor(rep(1:subs,times=j)),obstime=tij)
+  dat$X1i <- rep(X1i,times=j)
+  dat$grp <- factor(dat$X1i, labels = c('Control', 'Treatment'))
+  dat$eij <- as.vector(unlist(sapply(j, function(x) rnorm(x,mean=0,sd=sigma))))
+  dat$b1i <- rep(bi[,1],times=j)
+  dat$b2i <- rep(bi[,2],times=j)
+  
+  # Make a continuous normally distributed outcome
+  dat$eta <- with(dat,beta[1]+beta[2]*X1i+beta[3]*obstime+beta[4]*X1i*obstime)
+  dat$yij <- with(dat, eta + eij + b1i + b2i*obstime)
+  
+  # Make a binary outcome
+  dat$yij_bin <- factor(dat$yij > median(dat$yij), labels = c('0', '1'))
+  
+  # Make a count outcome
+  dat$yij_pois <- pmax(0, round( (dat$yij - min(dat$yij))/ 15  ,0))
+  return(dat)
+}
+
+# Set the number of sims to run
+nsims = 10
+
+# Make three matrices to hold results for the three outcome types
+r2dat = data.frame()
+
+# y is the vector of outcomes for the three models
+y <- c(Normal = 'yij', Count = 'yij_pois', Binary = 'yij_bin')
+
+for (fix in c('Full', 'Reduced')){
+  
+  r2.cs = r2.gc = list()
+  
+  # Set up the equations for the normal, log linear, and logit models
+  model.covs = c('cs'='~1|id', 'gc'='~1+obstime|id')
+  model.fixed = c('Full'='~ grp * obstime', 'Reduced'='~ grp + obstime')
+  
+  sim = seed = 1
+  repeat {
+    
+    # Generate a dataset
+    dat <- Sim.LongDat(seed = seed)
+    
+    # Make linear and generalized linear mixed models
+    cs.mods = try(
+      list(
+        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['cs'])), data = dat),
+        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['cs'])), verbose = F, family = 'poisson', data = dat),
+        Binary = glmmPQL( fixed = as.formula(paste(y['Binary'], model.fixed[fix])),
+                          random = as.formula(paste(model.covs['cs'])), verbose = F, family = 'binomial', data = dat)
+      )
+    )
+    gc.mods = try(
+      list(
+        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['gc'])), data = dat),
+        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['gc'])), verbose = F, family = 'poisson', data = dat),
+        Binary = glmmPQL( fixed = as.formula(paste(y['Binary'], model.fixed[fix])),
+                          random = as.formula(paste(model.covs['gc'])), verbose = F, family = 'binomial', data = dat)
+      )
+    )
+    
+    
+    if(class(cs.mods) == "list" & class(gc.mods) == "list"){
+      
+      new.cs = lapply(cs.mods, function(x){
+        return(unlist(c(r.squaredGLMM(x), 'r2b' = r2beta(x, ddf='res', data=dat)[,'Rsq'])))
+      })
+      
+      new.gc = lapply(gc.mods, function(x){
+        return(c(r.squaredGLMM(x), 'r2b' = r2beta(x, ddf='res', data=dat)[,'Rsq']))
+      })
+      
+      for(i in names(y)){
+        r2.cs[[i]] = rbind(r2.cs[[i]], new.cs[[i]])
+        r2.gc[[i]] = rbind(r2.gc[[i]], new.gc[[i]])
+      }
+      
+      sim=sim+1
+    }
+    
+    seed=seed+1
+    
+    if(sim>nsims) break
+  }
+  
+  turn.to.df <- function(lst, cov){
+    df = lapply(lst, data.frame)
+    for(i in names(df)){
+      df[[i]]=mutate(df[[i]], Outcome=i, Model = fix, cov = cov)
+    }
+    
+    df <- do.call(rbind,df)%>% 
+      reshape2::melt(value.name = 'R2', id = c('Model', 'cov', 'Outcome'))%>%
+      dplyr::rename(Statistic = variable)
+    
+    return(df)
+  }
+  
+  
+  cs.df = turn.to.df(r2.cs, 'cs')
+  gc.df = turn.to.df(r2.gc, 'gc')
+  
+  r2dat = rbind(r2dat, cs.df, gc.df)
+    
+}
+
+# Change character variables to factors
+ch.vars <- lapply(r2dat, class) == "character"
+r2dat[, ch.vars] <- lapply(r2dat[, ch.vars], as.factor)
+
+#  Summary function for tables
+msd <- function(x,dig=2){
+  res = format(round(c(mean(x), sd(x)) , dig), nsmall=dig)
+  return(paste0(res[1], ' (', res[2], ')'))
+}
+
+tabular(cov*Model*Outcome~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)
+
+    

@@ -67,21 +67,10 @@ Sim.LongDat <- function(seed = 260689, subs = 100, beta = c(0,-1,1/2,1/2),
   dat$etac <- with(dat, eta + b1i + b2i*obstime)
   dat$yij <- with(dat, eta + eij + b1i + b2i*obstime)
   
-  dat$exp <- with(dat, abs(beta[2]*X1i+beta[3]*obstime+beta[4]*X1i*obstime))
-  dat$unexp <- with(dat, abs(b1i + b2i*obstime + eij))
-  
-  m1 = max(abs(dat$eta)); m2 = max(abs(dat$etac)); m = max(m1, m2)
-  
-  dat$eta.scaled = dat$eta / m
-  dat$etac.scaled = dat$etac / m 
-  
   # Make a binary outcome
-  #dat$yij.bin <- rbinom(n=nrow(dat),size=1,prob=with(dat,exp(eta.scaled)/(1 + exp(eta.scaled))))
   dat$yij_bin <- factor(dat$yij > median(dat$yij), labels = c('0', '1'))
   
   # Make a count outcome
-  #dat$yij.pois <- pmin(300, rpois(n = nrow(dat), lambda = exp(dat$eta.scaled)))
-  #dat$yij.pois <- as.numeric(quantcut(dat$yij, q = c(0,0.25, 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 1.00), labels = c(0:8)))
   dat$yij_pois <- pmax(0, round( (dat$yij - min(dat$yij))/ 15  ,0))
   return(dat)
 }

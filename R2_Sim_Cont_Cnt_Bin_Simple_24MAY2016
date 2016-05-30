@@ -1,4 +1,3 @@
-
 library(nlme)
 library(MASS)
 library(lme4)
@@ -11,9 +10,10 @@ library(r2glmm)
 
 
 # Note: This code does not reproduce the results in the paper 'An R Squared 
-# for Fixed effects in the GLMM.' The results shown here use the residual
-# degrees of freedom to compute R squared beta. To use the Kenward Roger
-# approach for the GLMM R squared beta, the SAS macro must be used.
+# for Fixed effects in the GLMM.' The results shown here use a special case
+# of R squared beta that does not use the Kenward Roger degrees of freedom 
+# to compute R squared beta. To use the Kenward Roger approach for a
+# GLMM, the SAS macro must be used.
 
 # link to the SAS macro:
 # https://github.com/bcjaeger/R2FixedEffectsGLMM/blob/master/Glimmix_R2_V3.sas
@@ -111,22 +111,30 @@ for (fix in c('Full', 'Reduced')){
     # Make linear and generalized linear mixed models
     cs.mods = try(
       list(
-        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])),
+                          control = lmeControl(opt = "optim"),
                           random = as.formula(paste(model.covs['cs'])), data = dat),
-        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])), control = lmeControl(opt = "optim"),
-                          random = as.formula(paste(model.covs['cs'])), verbose = F, family = 'poisson', data = dat),
+        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])),
+                          control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['cs'])), 
+                          verbose = F, family = 'poisson', data = dat),
         Binary = glmmPQL( fixed = as.formula(paste(y['Binary'], model.fixed[fix])),
-                          random = as.formula(paste(model.covs['cs'])), verbose = F, family = 'binomial', data = dat)
+                          random = as.formula(paste(model.covs['cs'])),
+                          verbose = F, family = 'binomial', data = dat)
       )
     )
     gc.mods = try(
       list(
-        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])), control = lmeControl(opt = "optim"),
+        Normal = lme(     fixed = as.formula(paste(y['Normal'], model.fixed[fix])), 
+                          control = lmeControl(opt = "optim"),
                           random = as.formula(paste(model.covs['gc'])), data = dat),
-        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])), control = lmeControl(opt = "optim"),
-                          random = as.formula(paste(model.covs['gc'])), verbose = F, family = 'poisson', data = dat),
+        Count  = glmmPQL( fixed = as.formula(paste(y['Count'], model.fixed[fix])),
+                          control = lmeControl(opt = "optim"),
+                          random = as.formula(paste(model.covs['gc'])), verbose = F,
+                          family = 'poisson', data = dat),
         Binary = glmmPQL( fixed = as.formula(paste(y['Binary'], model.fixed[fix])),
-                          random = as.formula(paste(model.covs['gc'])), verbose = F, family = 'binomial', data = dat)
+                          random = as.formula(paste(model.covs['gc'])), verbose = F, 
+                          family = 'binomial', data = dat)
       )
     )
     
@@ -134,11 +142,11 @@ for (fix in c('Full', 'Reduced')){
     if(class(cs.mods) == "list" & class(gc.mods) == "list"){
       
       new.cs = lapply(cs.mods, function(x){
-        return(unlist(c(r.squaredGLMM(x), 'r2b' = r2beta(x, ddf='res', data=dat)[,'Rsq'])))
+        c(r.squaredGLMM(x), 'r2b'=r2beta(x, partial=F, method='sgv')[,'Rsq'])
       })
       
       new.gc = lapply(gc.mods, function(x){
-        return(c(r.squaredGLMM(x), 'r2b' = r2beta(x, ddf='res', data=dat)[,'Rsq']))
+        c(r.squaredGLMM(x), 'r2b'=r2beta(x, partial=F, method='sgv')[,'Rsq'])
       })
       
       for(i in names(y)){
@@ -172,7 +180,7 @@ for (fix in c('Full', 'Reduced')){
   gc.df = turn.to.df(r2.gc, 'gc')
   
   r2dat = rbind(r2dat, cs.df, gc.df)
-    
+  
 }
 
 # Change character variables to factors
@@ -186,5 +194,3 @@ msd <- function(x,dig=2){
 }
 
 tabular(cov*Model*Outcome~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)
-
-    

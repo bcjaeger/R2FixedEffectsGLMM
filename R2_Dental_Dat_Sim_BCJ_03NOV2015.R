@@ -1,5 +1,3 @@
-
-
 rm(list=ls())
 
 library(lme4)
@@ -78,8 +76,8 @@ for(cov in c('CS', 'GC')){
     new.r2 = lapply(modlist, function(x){
       res = unlist(c(
         r.squaredGLMM(x), 
-        'r2bKR'=r2beta(x, data = dat, ddf='kr')['Rsq'],
-        'r2bNS'=r2beta(x, data = dat, ddf='res', NS.adj = T)['Rsq']
+        'r2bKR'=r2beta(x, method='kr', partial = F)['Rsq'],
+        'r2bNS'=r2beta(x, method='nsj', partial = F)['Rsq']
       ))
       names(res)=gsub('.Rsq', '', names(res))
       return(res)
@@ -102,5 +100,3 @@ r2dat$Model = factor(r2dat$Model,
                      ordered = T)
 
 tabular(cov*Model~Statistic*Heading()*R2*Heading()*(msd), data = r2dat)
-
-

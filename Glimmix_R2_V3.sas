@@ -1966,7 +1966,6 @@ run;
 	        set t4 t3;
 	        SumSq = NumDF*FValue/(DenDF);
 	        Rsq_B = SumSq/(1+SumSq);
-	        rename Label=Effect;
 	run;
 	
  %end;

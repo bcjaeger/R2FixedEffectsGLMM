@@ -15,11 +15,12 @@
 *
 *  Affiliation:  UNC at Chapel Hill
 *
-*  DATE:         06/08/2015
+*  DATE:         08/01/2016
 *
-*  HISTORY:      Mixed_R2   -- Ballarini          -- 12/04/2014 -- 
+*  HISTORY:                      Mixed_R2 -- Ballarini            -- 12/04/2014 -- 
 *				 Glimmix_R2 -- Ballarini / Jaeger -- 03/20/2015 -- 
 *				 Glimmix_R2 -- Ballarini / Jaeger -- 06/08/2015 -- Added _ERROR option to run faster if Normal
+*                                Glimmix_R2 -- Jaeger             -- 08/01/2016 -- Added Partial R2 for Normal Errors
 *
 *  LANGUAGE:     SAS VERSION 9.3
 *
@@ -1799,10 +1800,10 @@ lib = library of the dataset ,
                 	_CLASS= 		,/* List of all categorical variables separated by blanks*/			
 					_COV_TYPE=UN 	,/* Assumed covariance structure*/
 					_RANDOM=int     ,/* Random coefficients	*/
-					_ERROR=Normal   ,/* Specifies the link function  */
+					_ERROR=Normal   ,/* Specifies the dependent variable's distibution function  */
 					_PRINT_PROC=NO  ,/* If NO only R2 is printed	*/
 					_OUTNAME=       ,/* Name of Dataset produced (used for sims) */
-					_DDF=kr         ,/* The method of estimating denominator degrees of freedom */
+					_DDF=           ,/* The method of estimating denominator degrees of freedom */
 					SINTAX_ALL=);
 
 %let _PREDICTORS=%upcase(&_PREDICTORS);
@@ -1955,12 +1956,19 @@ run;
 	&_PRINT.;
 	run;
 	/* Modifies the dataset created in the proc mixed */
+
+    data t4; set t4; 
+		Effect = Label; 
+		drop Label;
+	run;
+
 	data R2;
-	        set t4;
+	        set t4 t3;
 	        SumSq = NumDF*FValue/(DenDF);
 	        Rsq_B = SumSq/(1+SumSq);
 	        rename Label=Effect;
-	run;										
+	run;
+	
  %end;
 
 /* If ERROR not Normal then do Glimmix*/
